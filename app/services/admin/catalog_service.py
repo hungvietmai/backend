@@ -29,8 +29,8 @@ class AdminCatalogService:
 
     def create_brand(self, data: dict):
         # No get_brand_by_slug in repo; rely on DB unique or add your own check elsewhere.
-        with self.db.begin():
-            row = self.repo.create_brand(data)
+        row = self.repo.create_brand(data)
+        self.db.commit()
         self.db.refresh(row)
         return row
 
@@ -38,8 +38,8 @@ class AdminCatalogService:
         row = self.repo.get_brand(brand_id)
         if not row:
             raise NotFound("Brand not found")
-        with self.db.begin():
-            row = self.repo.update_brand(row, data)
+        row = self.repo.update_brand(row, data)
+        self.db.commit()
         self.db.refresh(row)
         return row
 
@@ -47,12 +47,13 @@ class AdminCatalogService:
         row = self.repo.get_brand(brand_id)
         if not row:
             raise NotFound("Brand not found")
-        with self.db.begin():
-            if hard:
-                self.repo.delete_brand(row)
-            else:
-                # Soft-delete via SoftDeleteMixin (repo exposes update only)
-                self.repo.update_brand(row, {"deleted_at": datetime.now(timezone.utc)})
+        if hard:
+            self.repo.delete_brand(row)
+        else:
+            # Soft-delete via SoftDeleteMixin (repo exposes update only)
+            self.repo.update_brand(row, {"deleted_at": datetime.now(timezone.utc)})
+
+        self.db.commit()
 
     # ---------- Categories ----------
     def list_categories_page(self, *, q: str | None, parent_id: int | None, sort: List[str] | None, limit: int, offset: int) -> Page[CategoryOut]:
@@ -67,8 +68,8 @@ class AdminCatalogService:
         return CategoryOut.model_validate(row, from_attributes=True)
 
     def create_category(self, data: dict):
-        with self.db.begin():
-            row = self.repo.create_category(data)
+        row = self.repo.create_category(data)
+        self.db.commit()
         self.db.refresh(row)
         return row
 
@@ -76,8 +77,8 @@ class AdminCatalogService:
         row = self.repo.get_category(category_id)
         if not row:
             raise NotFound("Category not found")
-        with self.db.begin():
-            row = self.repo.update_category(row, data)
+        row = self.repo.update_category(row, data)
+        self.db.commit()
         self.db.refresh(row)
         return row
 
@@ -85,8 +86,8 @@ class AdminCatalogService:
         row = self.repo.get_category(category_id)
         if not row:
             raise NotFound("Category not found")
-        with self.db.begin():
-            row = self.repo.update_category(row, {"parent_id": parent_id})
+        row = self.repo.update_category(row, {"parent_id": parent_id})
+        self.db.commit()
         self.db.refresh(row)
         return row
 
@@ -99,8 +100,9 @@ class AdminCatalogService:
         if hard and self.repo.has_children(category_id):
             raise BadRequest("Cannot hard-delete a category that has children")
 
-        with self.db.begin():
-            if hard:
-                self.repo.delete_category(row)
-            else:
-                self.repo.update_category(row, {"deleted_at": datetime.now(timezone.utc)})
+        if hard:
+            self.repo.delete_category(row)
+        else:
+            self.repo.update_category(row, {"deleted_at": datetime.now(timezone.utc)})
+
+        self.db.commit()

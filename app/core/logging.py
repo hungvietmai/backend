@@ -10,6 +10,7 @@ from app.core.config import settings
 
 def setup_logging(level: Literal["CRITICAL","ERROR","WARNING","INFO","DEBUG","NOTSET"]) -> None:
     lvl = (level or settings.LOG_LEVEL).upper()
+    
     config = {
         "version": 1,
         "disable_existing_loggers": False,
@@ -19,7 +20,7 @@ def setup_logging(level: Literal["CRITICAL","ERROR","WARNING","INFO","DEBUG","NO
                 "datefmt": "%Y-%m-%dT%H:%M:%S%z",
             },
             "access": {
-                "format": '%(asctime)s %(levelname)s [uvicorn.access] %(client_addr)s - "%(request_line)s" %(status_code)s',
+                "format": '%(asctime)s %(levelname)s [%(name)s] %(message)s',
                 "datefmt": "%Y-%m-%dT%H:%M:%S%z",
             },
         },
@@ -36,5 +37,6 @@ def setup_logging(level: Literal["CRITICAL","ERROR","WARNING","INFO","DEBUG","NO
             "sqlalchemy.engine": {"handlers": ["default"], "level": "WARNING", "propagate": False},
         },
     }
+    
     logging.config.dictConfig(config)
     logging.getLogger(__name__).info("Logging configured (level=%s)", lvl)

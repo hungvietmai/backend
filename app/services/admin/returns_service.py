@@ -42,11 +42,11 @@ class AdminReturnsService:
         if r.status not in {ReturnStatusEnum.requested}:
             raise BadRequest("Only 'requested' returns can be decided")
 
-        with self.db.begin():
-            r.status = ReturnStatusEnum.approved if approve else ReturnStatusEnum.rejected
-            # If you want to persist reason somewhere: r.reason = reason or r.reason
-            self.returns.save(r)
+        r.status = ReturnStatusEnum.approved if approve else ReturnStatusEnum.rejected
+        # If you want to persist reason somewhere: r.reason = reason or r.reason
+        self.returns.save(r)
 
+        self.db.commit()
         self.db.refresh(r)
         return r
 
@@ -60,28 +60,28 @@ class AdminReturnsService:
 
         items = self.returns.list_items(r.id)
 
-        with self.db.begin():
-            for ri in items:
-                if ri.qty <= 0:
-                    continue
-                # fetch original order item to find the variant
-                oi = self.orders.get_item(ri.order_item_id)
-                if not oi or not oi.variant_id:
-                    continue
-                v = self.inv.load_variant(oi.variant_id)
-                if not v:
-                    continue
-                self.inv.change_stock(
-                    v,
-                    qty_delta=ri.qty,
-                    reason=InventoryMovementType.return_in,
-                    order_id=r.order_id,
-                    note=note or "return received",
-                )
+        for ri in items:
+            if ri.qty <= 0:
+                continue
+            # fetch original order item to find the variant
+            oi = self.orders.get_item(ri.order_item_id)
+            if not oi or not oi.variant_id:
+                continue
+            v = self.inv.load_variant(oi.variant_id)
+            if not v:
+                continue
+            self.inv.change_stock(
+                v,
+                qty_delta=ri.qty,
+                reason=InventoryMovementType.return_in,
+                order_id=r.order_id,
+                note=note or "return received",
+            )
 
-            r.status = ReturnStatusEnum.received
-            self.returns.save(r)
+        r.status = ReturnStatusEnum.received
+        self.returns.save(r)
 
+        self.db.commit()
         self.db.refresh(r)
         return r
 
@@ -98,23 +98,23 @@ class AdminReturnsService:
         if not order:
             raise NotFound("Order not found for this return")
 
-        with self.db.begin():
-            # Create refund payment (full amount for simplicity)
-            self.payments.create(
-                order_id=order.id,
-                amount_cents=order.total_cents,
-                status=PaymentStatusEnum.refunded,
-                method=method,
-                transaction_ref=None,
-            )
+        # Create refund payment (full amount for simplicity)
+        self.payments.create(
+            order_id=order.id,
+            amount_cents=order.total_cents,
+            status=PaymentStatusEnum.refunded,
+            method=method,
+            transaction_ref=None,
+        )
 
-            # Update statuses
-            r.status = ReturnStatusEnum.refunded
-            self.returns.save(r)
+        # Update statuses
+        r.status = ReturnStatusEnum.refunded
+        self.returns.save(r)
 
-            order.status = OrderStatusEnum.refunded
-            self.orders.save(order)
+        order.status = OrderStatusEnum.refunded
+        self.orders.save(order)
 
+        self.db.commit()
         self.db.refresh(r)
         return r
 
@@ -126,9 +126,9 @@ class AdminReturnsService:
         if r.status not in {ReturnStatusEnum.refunded, ReturnStatusEnum.rejected}:
             raise BadRequest("Only 'refunded' or 'rejected' returns can be closed")
 
-        with self.db.begin():
-            r.status = ReturnStatusEnum.closed
-            self.returns.save(r)
+        r.status = ReturnStatusEnum.closed
+        self.returns.save(r)
 
+        self.db.commit()
         self.db.refresh(r)
         return r

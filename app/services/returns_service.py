@@ -69,8 +69,8 @@ class ReturnsService:
         if o.status not in {OrderStatusEnum.paid, OrderStatusEnum.fulfilled}:
             raise BadRequest("Order not eligible for return")
 
-        with self.db.begin():
-            r = self.returns.create_request(order_id, reason=reason)
+        r = self.returns.create_request(order_id, reason=reason)
+        self.db.commit()
         self.db.refresh(r)
         return r
 
@@ -86,8 +86,8 @@ class ReturnsService:
         if qty > oi.qty:
             raise BadRequest("qty exceeds purchased amount")
 
-        with self.db.begin():
-            row = self.returns.add_item(return_id, order_item_id=order_item_id, qty=qty)
+        row = self.returns.add_item(return_id, order_item_id=order_item_id, qty=qty)
+        self.db.commit()
         self.db.refresh(row)
         return row
 
@@ -99,5 +99,5 @@ class ReturnsService:
         rr = self.returns.get(ri.return_id)
         if not rr or not rr.order or rr.order.user_id != user_id:
             raise NotFound("Return item not found")
-        with self.db.begin():
-            self.db.delete(ri)
+        self.db.delete(ri)
+        self.db.commit()

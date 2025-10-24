@@ -39,13 +39,13 @@ class AdminInventoryService:
         v = self.inv.load_variant(variant_id)
         if not v:
             raise NotFound("Variant not found")
-        with self.db.begin():
-            mov = self.inv.change_stock(
-                v,
-                qty_delta=qty_delta,
-                reason=InventoryMovementType.manual_adjust,
-                order_id=None,
-                note=note,
-            )
+        mov = self.inv.change_stock(
+            v,
+            qty_delta=qty_delta,
+            reason=InventoryMovementType.manual_adjust,
+            order_id=None,
+            note=note,
+        )
+        self.db.commit()
         self.db.refresh(mov)
         return mov

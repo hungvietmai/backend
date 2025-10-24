@@ -36,16 +36,16 @@ class ProductService:
             "is_archived": payload.is_archived,
         }
 
-        with self.db.begin():
-            p = self.repo.create(data)
-            # If your repo exposes category assignment (e.g., set_categories),
-            # call it here. Otherwise, skip or implement in repo.
-            if getattr(payload, "category_ids", None):
-                # Optional: only if ProductRepository implements this.
-                set_cats = getattr(self.repo, "set_categories", None)
-                if callable(set_cats):
-                    set_cats(p.id, payload.category_ids)
+        p = self.repo.create(data)
+        # If your repo exposes category assignment (e.g., set_categories),
+        # call it here. Otherwise, skip or implement in repo.
+        if getattr(payload, "category_ids", None):
+            # Optional: only if ProductRepository implements this.
+            set_cats = getattr(self.repo, "set_categories", None)
+            if callable(set_cats):
+                set_cats(p.id, payload.category_ids)
 
+        self.db.commit()
         self.db.refresh(p)
         return p
 
@@ -71,14 +71,14 @@ class ProductService:
         if payload.is_active is not None:       updates["is_active"] = payload.is_active
         if payload.is_archived is not None:     updates["is_archived"] = payload.is_archived
 
-        with self.db.begin():
-            if updates:
-                p = self.repo.update(p, updates)
-            if payload.category_ids is not None:
-                set_cats = getattr(self.repo, "set_categories", None)
-                if callable(set_cats):
-                    set_cats(p.id, payload.category_ids)
+        if updates:
+            p = self.repo.update(p, updates)
+        if payload.category_ids is not None:
+            set_cats = getattr(self.repo, "set_categories", None)
+            if callable(set_cats):
+                set_cats(p.id, payload.category_ids)
 
+        self.db.commit()
         self.db.refresh(p)
         return p
 
@@ -104,13 +104,14 @@ class ProductService:
         if not p:
             raise NotFound(detail="Product not found")
 
-        with self.db.begin():
-            if hard:
-                # new repo has only `delete(row)` → perform hard delete there
-                self.repo.delete(p)
-            else:
-                # soft/archive via flag; actual SoftDelete can be added if desired
-                self.repo.update(p, {"is_archived": True})
+        if hard:
+            # new repo has only `delete(row)` → perform hard delete there
+            self.repo.delete(p)
+        else:
+            # soft/archive via flag; actual SoftDelete can be added if desired
+            self.repo.update(p, {"is_archived": True})
+
+        self.db.commit()
 
     # ---------- Variants ----------
     def add_variant(self, product_id: int, payload: VariantCreate) -> ProductVariant:
@@ -127,8 +128,8 @@ class ProductService:
         }
 
         try:
-            with self.db.begin():
-                v = self.repo.create_variant(product_id, data)
+            v = self.repo.create_variant(product_id, data)
+            self.db.commit()
             self.db.refresh(v)
             return v
         except Exception as e:
@@ -146,9 +147,8 @@ class ProductService:
         if payload.price_cents is not None: data["price_cents"] = payload.price_cents
         if payload.image_url is not None:  data["image_url"] = payload.image_url
 
-        with self.db.begin():
-            v = self.repo.update_variant(v, data)
-
+        v = self.repo.update_variant(v, data)
+        self.db.commit()
         self.db.refresh(v)
         return v
 
@@ -161,8 +161,8 @@ class ProductService:
         v = self.repo.get_variant(variant_id)
         if not v:
             return
-        with self.db.begin():
-            self.repo.delete_variant(v)
+        self.repo.delete_variant(v)
+        self.db.commit()
 
     # ---------- Images ----------
     def add_image(self, product_id: int, payload: ImageCreate) -> ProductImage:
@@ -171,14 +171,14 @@ class ProductService:
 
         data = {"url": payload.url, "is_primary": payload.is_primary, "sort_order": payload.sort_order}
 
-        with self.db.begin():
-            img = self.repo.add_image(product_id, data)
-            if payload.is_primary:
-                # demote others
-                for other in self.repo.list_images(product_id):
-                    if other.id != img.id and other.is_primary:
-                        self.repo.update_image(other, {"is_primary": False})
+        img = self.repo.add_image(product_id, data)
+        if payload.is_primary:
+            # demote others
+            for other in self.repo.list_images(product_id):
+                if other.id != img.id and other.is_primary:
+                    self.repo.update_image(other, {"is_primary": False})
 
+        self.db.commit()
         self.db.refresh(img)
         return img
 
@@ -191,13 +191,13 @@ class ProductService:
         if payload.is_primary is not None: data["is_primary"] = payload.is_primary
         if payload.sort_order is not None: data["sort_order"] = payload.sort_order
 
-        with self.db.begin():
-            img = self.repo.update_image(img, data)
-            if data.get("is_primary"):
-                for other in self.repo.list_images(img.product_id):
-                    if other.id != img.id and other.is_primary:
-                        self.repo.update_image(other, {"is_primary": False})
+        img = self.repo.update_image(img, data)
+        if data.get("is_primary"):
+            for other in self.repo.list_images(img.product_id):
+                if other.id != img.id and other.is_primary:
+                    self.repo.update_image(other, {"is_primary": False})
 
+        self.db.commit()
         self.db.refresh(img)
         return img
 
@@ -205,5 +205,5 @@ class ProductService:
         img = self.repo.get_image(image_id)
         if not img:
             return
-        with self.db.begin():
-            self.repo.delete_image(img)
+        self.repo.delete_image(img)
+        self.db.commit()

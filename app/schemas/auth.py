@@ -25,7 +25,6 @@ class MeOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ChangePasswordIn(BaseModel):
-    current_password: str
     new_password: str = Field(min_length=8, max_length=128)
     model_config = ConfigDict(extra="forbid")
 

@@ -117,72 +117,72 @@ class OrderService:
         total = subtotal + int(shipping_fee_cents or 0)
         now = datetime.now(timezone.utc)
 
-        with self.db.begin():
-            # 1) create order (snapshot shipping)
-            o = self.orders.create({
-                "order_number": gen_order_number(),
-                "user_id": user_id,
-                "status": OrderStatusEnum.pending,
-                "subtotal_cents": subtotal,
-                "shipping_fee_cents": shipping_fee_cents,
-                "discount_cents": 0,
-                "total_cents": total,
-                "currency": "VND",
-                "ship_full_name": shipping["full_name"],
-                "ship_mobile_num": shipping["mobile_num"],
-                "ship_detail_address": shipping["detail_address"],
-                "ship_province_name": shipping.get("province_name"),
-                "ship_district_name": shipping.get("district_name"),
-                "ship_ward_name": shipping.get("ward_name"),
-                "ship_zip_code": shipping.get("zip_code"),
-            })
+        # 1) create order (snapshot shipping)
+        o = self.orders.create({
+            "order_number": gen_order_number(),
+            "user_id": user_id,
+            "status": OrderStatusEnum.pending,
+            "subtotal_cents": subtotal,
+            "shipping_fee_cents": shipping_fee_cents,
+            "discount_cents": 0,
+            "total_cents": total,
+            "currency": "VND",
+            "ship_full_name": shipping["full_name"],
+            "ship_mobile_num": shipping["mobile_num"],
+            "ship_detail_address": shipping["detail_address"],
+            "ship_province_name": shipping.get("province_name"),
+            "ship_district_name": shipping.get("district_name"),
+            "ship_ward_name": shipping.get("ward_name"),
+            "ship_zip_code": shipping.get("zip_code"),
+        })
 
-            # 2) add items & decrement stock with ledger
-            for it in cart.items:
-                v = self.inv.load_variant(it.variant_id)
-                # v cannot be None here due to earlier checks, but keep it safe:
-                if not v or not v.product or not v.product.is_active:
-                    raise BadRequest(detail=f"Variant {it.variant_id} unavailable")
+        # 2) add items & decrement stock with ledger
+        for it in cart.items:
+            v = self.inv.load_variant(it.variant_id)
+            # v cannot be None here due to earlier checks, but keep it safe:
+            if not v or not v.product or not v.product.is_active:
+                raise BadRequest(detail=f"Variant {it.variant_id} unavailable")
 
-                self.inv.change_stock(
-                    v, -it.qty, InventoryMovementType.sold,
-                    order_id=o.id, note="checkout"
-                )
-
-                self.orders.add_item(
-                    o.id,
-                    {
-                        "product_id": v.product_id,
-                        "variant_id": v.id,
-                        "name": v.product.name,
-                        "sku": v.sku,
-                        "color": v.color,
-                        "size": v.size,
-                        "qty": it.qty,
-                        "unit_price_cents": it.unit_price_cents,
-                        "line_total_cents": it.line_total_cents,
-                    },
-                )
-
-            # 3) mark cart checked out
-            self.carts.set_checked_out(cart)
-
-            # 4) create payment row
-            p_status = PaymentStatusEnum.paid if pay_now else PaymentStatusEnum.pending
-            self.payments.create(
-                o.id,
-                amount_cents=o.total_cents,
-                status=p_status,
-                method=payment_method,
-                transaction_ref=None,
+            self.inv.change_stock(
+                v, -it.qty, InventoryMovementType.sold,
+                order_id=o.id, note="checkout"
             )
 
-            # 5) update order status if paid now
-            if pay_now:
-                o.status = OrderStatusEnum.paid
-                o.paid_at = now
-                self.orders.save(o)
+            self.orders.add_item(
+                o.id,
+                {
+                    "product_id": v.product_id,
+                    "variant_id": v.id,
+                    "name": v.product.name,
+                    "sku": v.sku,
+                    "color": v.color,
+                    "size": v.size,
+                    "qty": it.qty,
+                    "unit_price_cents": it.unit_price_cents,
+                    "line_total_cents": it.line_total_cents,
+                },
+            )
 
+        # 3) mark cart checked out
+        self.carts.set_checked_out(cart)
+
+        # 4) create payment row
+        p_status = PaymentStatusEnum.paid if pay_now else PaymentStatusEnum.pending
+        self.payments.create(
+            o.id,
+            amount_cents=o.total_cents,
+            status=p_status,
+            method=payment_method,
+            transaction_ref=None,
+        )
+
+        # 5) update order status if paid now
+        if pay_now:
+            o.status = OrderStatusEnum.paid
+            o.paid_at = now
+            self.orders.save(o)
+
+        self.db.commit()
         self.db.refresh(o)
         return o
 
@@ -193,18 +193,18 @@ class OrderService:
             raise BadRequest(detail="Order cannot be paid")
 
         now = datetime.now(timezone.utc)
-        with self.db.begin():
-            self.payments.create(
-                o.id,
-                amount_cents=o.total_cents,
-                status=PaymentStatusEnum.paid,
-                method=method,
-                transaction_ref=None,
-            )
-            o.status = OrderStatusEnum.paid
-            o.paid_at = now
-            self.orders.save(o)
+        self.payments.create(
+            o.id,
+            amount_cents=o.total_cents,
+            status=PaymentStatusEnum.paid,
+            method=method,
+            transaction_ref=None,
+        )
+        o.status = OrderStatusEnum.paid
+        o.paid_at = now
+        self.orders.save(o)
 
+        self.db.commit()
         self.db.refresh(o)
         return o
 
@@ -215,20 +215,20 @@ class OrderService:
             raise BadRequest(detail="Order cannot be cancelled at this stage")
 
         now = datetime.now(timezone.utc)
-        with self.db.begin():
-            # return stock
-            for it in o.items:
-                if it.variant_id:
-                    v = self.inv.load_variant(it.variant_id)
-                    if v:
-                        self.inv.change_stock(
-                            v, +it.qty, InventoryMovementType.cancel_adjust,
-                            order_id=o.id, note="cancel"
-                        )
-            o.status = OrderStatusEnum.cancelled
-            o.cancelled_at = now
-            self.orders.save(o)
+        # return stock
+        for it in o.items:
+            if it.variant_id:
+                v = self.inv.load_variant(it.variant_id)
+                if v:
+                    self.inv.change_stock(
+                        v, +it.qty, InventoryMovementType.cancel_adjust,
+                        order_id=o.id, note="cancel"
+                    )
+        o.status = OrderStatusEnum.cancelled
+        o.cancelled_at = now
+        self.orders.save(o)
 
+        self.db.commit()
         self.db.refresh(o)
         return o
 
@@ -241,10 +241,10 @@ class OrderService:
             raise BadRequest(detail="Only paid orders can be fulfilled")
 
         now = datetime.now(timezone.utc)
-        with self.db.begin():
-            o.status = OrderStatusEnum.fulfilled
-            o.fulfilled_at = now
-            self.orders.save(o)
+        o.status = OrderStatusEnum.fulfilled
+        o.fulfilled_at = now
+        self.orders.save(o)
 
+        self.db.commit()
         self.db.refresh(o)
         return o

@@ -50,33 +50,33 @@ class AdminUserService:
 
     def set_role(self, user_id: int, role: UserRoleEnum):
         u = self._get_or_404(user_id)
-        with self.db.begin():
-            u.role = role
-            self.repo.save(u)
+        u.role = role
+        self.repo.save(u)
+        self.db.commit()
         self.db.refresh(u)
         return u
 
     def set_active(self, user_id: int, active: bool):
         u = self._get_or_404(user_id)
-        with self.db.begin():
-            u.is_active = active
-            self.repo.save(u)
+        u.is_active = active
+        self.repo.save(u)
+        self.db.commit()
         self.db.refresh(u)
         return u
 
     def soft_delete(self, user_id: int):
         u = self._get_or_404(user_id)
         now = datetime.now(timezone.utc)
-        with self.db.begin():
-            u.deleted_at = cast("datetime | None", now)   # keep type checker happy
-            self.repo.save(u)
-        # optional: don’t refresh; returning a simple payload is fine
+        u.deleted_at = cast("datetime | None", now)   # keep type checker happy
+        self.repo.save(u)
+        self.db.commit()
+        # optional: don't refresh; returning a simple payload is fine
         return {"ok": True}
 
     def restore(self, user_id: int):
         u = self._get_or_404(user_id)
-        with self.db.begin():
-            u.deleted_at = cast("datetime | None", None)
-            self.repo.save(u)
+        u.deleted_at = cast("datetime | None", None)
+        self.repo.save(u)
+        self.db.commit()
         self.db.refresh(u)
         return u

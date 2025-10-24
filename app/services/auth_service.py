@@ -31,8 +31,8 @@ class AuthService:
             "hashed_password": hash_password(password),
             "full_name": full_name,
         }
-        with self.db.begin():
-            user = self.users.create(data)
+        user = self.users.create(data)
+        self.db.commit()
         self.db.refresh(user)
         return user
 
@@ -43,7 +43,15 @@ class AuthService:
             raise Unauthorized(detail="Incorrect email or password")
         if not user.is_active or user.deleted_at is not None:
             raise Unauthorized(detail="User disabled")
-        return create_access_token(subject=str(user.id))
+        # Create token with full user information
+        user_claims = {
+            "email": user.email,
+            "role": user.role.value if hasattr(user.role, 'value') else user.role,
+            "full_name": user.full_name,
+            "is_active": user.is_active,
+            "phone": user.phone
+        }
+        return create_access_token(subject=str(user.id), extra_claims=user_claims)
 
     # ---------- Forgot / Reset (stateless) ----------
     def forgot_password(self, email: str) -> dict:
@@ -82,22 +90,20 @@ class AuthService:
             raise Unauthorized(detail="Invalid or expired reset token")
 
         # Update via repo.save (no commit here)
-        with self.db.begin():
-            user.hashed_password = hash_password(new_password)
-            self.users.save(user)
+        user.hashed_password = hash_password(new_password)
+        self.users.save(user)
+        self.db.commit()
 
     # ---------- Change password (logged-in) ----------
-    def change_password(self, user_id: int, current_password: str, new_password: str) -> None:
+    def change_password(self, user_id: int, new_password: str) -> None:
         user = self.users.get(user_id)
         if not user or user.deleted_at is not None:
             raise NotFound(detail="User not found")
         if not user.is_active:
             raise Unauthorized(detail="User disabled")
-        if not verify_password(current_password, user.hashed_password):
-            raise Unauthorized(detail="Current password incorrect")
         if len(new_password) < settings.PASSWORD_MIN_LEN:
             raise BadRequest(detail="Password too short")
 
-        with self.db.begin():
-            user.hashed_password = hash_password(new_password)
-            self.users.save(user)
+        user.hashed_password = hash_password(new_password)
+        self.users.save(user)
+        self.db.commit()

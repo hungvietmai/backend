@@ -25,7 +25,11 @@ class TokenClaims(BaseModel):
     sub: str
     exp: int
     iat: int
+    email: Optional[str] = None
     role: Optional[str] = None
+    full_name: Optional[str] = None
+    is_active: Optional[bool] = None
+    phone: Optional[str] = None
 
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     try:
@@ -38,13 +42,20 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     except (JWTError, ValidationError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    # SQLAlchemy 2.0: use Session.get instead of Query.get
+    # Validate that user still exists and is active by querying the database
+    # We still need to check the database to ensure the user hasn't been deleted or deactivated
     user = db.get(User, user_id)
     if not user or not user.is_active or user.deleted_at is not None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Inactive or missing user")
+
     return user
 
-def require_admin(current: User = Depends(get_current_user)) -> User:
-    if current.role != UserRoleEnum.admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admins only")
-    return current
+def require_admin(token: str = Depends(oauth2_scheme)) -> TokenClaims:
+    try:
+        payload = decode_token(token)                 # dict[str, Any]
+        claims = TokenClaims.model_validate(payload)  # validates & narrows types
+        if claims.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admins only")
+        return claims
+    except (JWTError, ValidationError):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")

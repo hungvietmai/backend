@@ -62,8 +62,8 @@ class ReviewService:
         data = payload.model_dump()
         data.update({"user_id": payload.user_id, "product_id": product_id})
 
-        with self.db.begin():
-            row = self.repo.create(data)
+        row = self.repo.create(data)
+        self.db.commit()
 
         self.db.refresh(row)
         return ReviewOut.model_validate(row, from_attributes=True)
@@ -77,8 +77,8 @@ class ReviewService:
         if not changes:
             return ReviewOut.model_validate(row, from_attributes=True)
 
-        with self.db.begin():
-            row = self.repo.update(row, changes)
+        row = self.repo.update(row, changes)
+        self.db.commit()
 
         self.db.refresh(row)
         return ReviewOut.model_validate(row, from_attributes=True)
@@ -90,5 +90,5 @@ class ReviewService:
         if row.user_id != user_id:
             raise BadRequest("You can only delete your own review")
 
-        with self.db.begin():
-            self.repo.soft_delete(row)
+        self.repo.soft_delete(row)
+        self.db.commit()

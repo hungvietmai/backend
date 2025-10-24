@@ -27,25 +27,25 @@ class AddressService:
         if not self.repo.list_for_user(user_id):
             data = {**data, "is_default": True}
 
-        with self.db.begin():
-            # If caller wants this new one to be default → clear others first
-            if data.get("is_default"):
-                self.repo.clear_default(user_id)
-            row = self.repo.create_for_user(user_id, data)
+        # If caller wants this new one to be default → clear others first
+        if data.get("is_default"):
+            self.repo.clear_default(user_id)
+        row = self.repo.create_for_user(user_id, data)
 
+        self.db.commit()
         self.db.refresh(row)
         return row
 
     def update(self, user_id: int, address_id: int, data: dict):
         row = self._owned(user_id, address_id)
 
-        with self.db.begin():
-            # Only treat True specially (switch default). We ignore explicit False
-            # to avoid ending up with zero defaults. Use make_default() to switch.
-            if data.get("is_default") is True:
-                self.repo.clear_default(user_id)
-            row = self.repo.update(row, data)
+        # Only treat True specially (switch default). We ignore explicit False
+        # to avoid ending up with zero defaults. Use make_default() to switch.
+        if data.get("is_default") is True:
+            self.repo.clear_default(user_id)
+        row = self.repo.update(row, data)
 
+        self.db.commit()
         self.db.refresh(row)
         return row
 
@@ -53,18 +53,19 @@ class AddressService:
         row = self._owned(user_id, address_id)
         was_default = bool(row.is_default)
 
-        with self.db.begin():
-            self.repo.delete(row)
-            # If we removed the default, ensure another becomes default (if any remain)
-            if was_default:
-                remaining = self.repo.list_for_user(user_id)
-                if remaining:
-                    self.repo.update(remaining[0], {"is_default": True})
+        self.repo.delete(row)
+        # If we removed the default, ensure another becomes default (if any remain)
+        if was_default:
+            remaining = self.repo.list_for_user(user_id)
+            if remaining:
+                self.repo.update(remaining[0], {"is_default": True})
+
+        self.db.commit()
 
     def make_default(self, user_id: int, address_id: int):
         row = self._owned(user_id, address_id)
-        with self.db.begin():
-            self.repo.clear_default(user_id)
-            row = self.repo.update(row, {"is_default": True})
+        self.repo.clear_default(user_id)
+        row = self.repo.update(row, {"is_default": True})
+        self.db.commit()
         self.db.refresh(row)
         return row

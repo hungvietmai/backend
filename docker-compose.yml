@@ -24,7 +24,7 @@ services:
       db:
         condition: service_healthy
     volumes:
-      - .:/app 
+      - .:/app
     command:
       - sh
       - -lc
@@ -69,7 +69,7 @@ services:
       PGADMIN_DEFAULT_EMAIL: admin@example.com
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
-      - "8081:80"           
+      - "8081:80"
     depends_on:
       db:
         condition: service_healthy

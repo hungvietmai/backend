@@ -36,13 +36,13 @@ class CartService:
             raise BadRequest(detail="Insufficient stock")
 
         price = self._unit_price_for(variant)
-        with self.db.begin():
-            item = self.carts.add_item(
-                cart,
-                variant_id=variant_id,
-                qty=qty,
-                unit_price_cents=price,
-            )
+        item = self.carts.add_item(
+            cart,
+            variant_id=variant_id,
+            qty=qty,
+            unit_price_cents=price,
+        )
+        self.db.commit()
         self.db.refresh(item)
         return item
 
@@ -62,8 +62,8 @@ class CartService:
         if qty > (variant.stock_qty or 0):
             raise BadRequest(detail="Insufficient stock")
 
-        with self.db.begin():
-            item = self.carts.update_item_qty(item, qty)
+        item = self.carts.update_item_qty(item, qty)
+        self.db.commit()
         self.db.refresh(item)
         return item
 
@@ -72,5 +72,5 @@ class CartService:
         item = self.carts.get_item(item_id)
         if not item or item.cart_id != cart.id:
             return
-        with self.db.begin():
-            self.carts.remove_item(item)
+        self.carts.remove_item(item)
+        self.db.commit()

@@ -25,6 +25,16 @@ class Settings(BaseSettings):
     RESET_TOKEN_EXPIRE_MINUTES: int = 5
     PASSWORD_MIN_LEN: int = 10
 
+    # --- CORS ---
+    CORS_ORIGINS: str = ""
+
+    # --- Payment Services ---
+    MOMO_API_KEY: str = ""
+    MOMO_SECRET_KEY: str = ""
+    ZALOPAY_APP_ID: str = ""
+    ZALOPAY_KEY1: str = ""
+    ZALOPAY_KEY2: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     @field_validator("LOG_LEVEL", mode="before")
@@ -43,6 +53,10 @@ class Settings(BaseSettings):
     @property
     def is_dev(self) -> bool:
         return self.ENV == "dev"
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if self.CORS_ORIGINS]
 
 
 settings = Settings()

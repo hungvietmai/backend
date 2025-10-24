@@ -19,9 +19,8 @@ class AdminReviewService:
         if not r:
             raise NotFound("Review not found")
 
-        with self.db.begin():
-            r = self.reviews.update(r, {"is_published": is_published})
-
+        r = self.reviews.update(r, {"is_published": is_published})
+        self.db.commit()
         self.db.refresh(r)
         return r
 
@@ -29,16 +28,16 @@ class AdminReviewService:
         r = self.reviews.get(review_id)
         if not r:
             return
-        with self.db.begin():
-            # repo helper sets deleted_at to now (UTC)
-            self.reviews.soft_delete(r)
+        # repo helper sets deleted_at to now (UTC)
+        self.reviews.soft_delete(r)
+        self.db.commit()
 
     # Optional: restore a soft-deleted review
     def restore(self, review_id: int):
         r = self.reviews.get(review_id)
         if not r:
             raise NotFound("Review not found")
-        with self.db.begin():
-            r = self.reviews.update(r, {"deleted_at": cast("datetime | None", None)})
+        r = self.reviews.update(r, {"deleted_at": cast("datetime | None", None)})
+        self.db.commit()
         self.db.refresh(r)
         return r

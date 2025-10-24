@@ -73,18 +73,18 @@ class AdminOrderService:
             raise BadRequest("Only 'pending' orders can be marked as paid")
 
         now = datetime.now(timezone.utc)
-        with self.db.begin():
-            self.payments.create(
-                o.id,
-                amount_cents=o.total_cents,
-                status=PaymentStatusEnum.paid,
-                method=method,
-                transaction_ref=None,
-            )
-            o.status = OrderStatusEnum.paid
-            o.paid_at = cast("datetime | None", now)
-            self.orders.save(o)
+        self.payments.create(
+            o.id,
+            amount_cents=o.total_cents,
+            status=PaymentStatusEnum.paid,
+            method=method,
+            transaction_ref=None,
+        )
+        o.status = OrderStatusEnum.paid
+        o.paid_at = cast("datetime | None", now)
+        self.orders.save(o)
 
+        self.db.commit()
         self.db.refresh(o)
         return o
 
@@ -95,19 +95,19 @@ class AdminOrderService:
             raise BadRequest("Only 'pending' orders can be cancelled")
 
         now = datetime.now(timezone.utc)
-        with self.db.begin():
-            for it in o.items:
-                if it.variant_id:
-                    v = self.inv.load_variant(it.variant_id)
-                    if v:
-                        self.inv.change_stock(
-                            v, +it.qty, InventoryMovementType.cancel_adjust,
-                            order_id=o.id, note="admin cancel"
-                        )
-            o.status = OrderStatusEnum.cancelled
-            o.cancelled_at = cast("datetime | None", now)
-            self.orders.save(o)
+        for it in o.items:
+            if it.variant_id:
+                v = self.inv.load_variant(it.variant_id)
+                if v:
+                    self.inv.change_stock(
+                        v, +it.qty, InventoryMovementType.cancel_adjust,
+                        order_id=o.id, note="admin cancel"
+                    )
+        o.status = OrderStatusEnum.cancelled
+        o.cancelled_at = cast("datetime | None", now)
+        self.orders.save(o)
 
+        self.db.commit()
         self.db.refresh(o)
         return o
 
@@ -120,16 +120,16 @@ class AdminOrderService:
         if o.status not in {OrderStatusEnum.paid, OrderStatusEnum.fulfilled}:
             raise BadRequest("Shipment can be created only for paid/fulfilled orders")
 
-        with self.db.begin():
-            s = self.shipments.get_by_order(o.id)
-            if not s:
-                s = self.shipments.create(
-                    o.id,
-                    {"carrier": carrier, "tracking_number": tracking, "status": ShipmentStatusEnum.packed},
-                )
-            else:
-                self.shipments.update(s, {"carrier": carrier, "tracking_number": tracking})
+        s = self.shipments.get_by_order(o.id)
+        if not s:
+            s = self.shipments.create(
+                o.id,
+                {"carrier": carrier, "tracking_number": tracking, "status": ShipmentStatusEnum.packed},
+            )
+        else:
+            self.shipments.update(s, {"carrier": carrier, "tracking_number": tracking})
 
+        self.db.commit()
         self.db.refresh(o)
         return o.shipment
 
@@ -155,37 +155,37 @@ class AdminOrderService:
         shipped_dt = _parse_iso(shipped_at_iso)
         delivered_dt = _parse_iso(delivered_at_iso)
 
-        with self.db.begin():
-            s = self.shipments.get_by_order(o.id)
-            if not s:
-                s = self.shipments.create(
-                    o.id,
-                    {
-                        "carrier": carrier,
-                        "tracking_number": tracking,
-                        "status": status,
-                        "shipped_at": shipped_dt,
-                        "delivered_at": delivered_dt,
-                    },
-                )
-            else:
-                self.shipments.update(
-                    s,
-                    {
-                        "status": status,
-                        "carrier": carrier,
-                        "tracking_number": tracking,
-                        "shipped_at": shipped_dt,
-                        "delivered_at": delivered_dt,
-                    },
-                )
+        s = self.shipments.get_by_order(o.id)
+        if not s:
+            s = self.shipments.create(
+                o.id,
+                {
+                    "carrier": carrier,
+                    "tracking_number": tracking,
+                    "status": status,
+                    "shipped_at": shipped_dt,
+                    "delivered_at": delivered_dt,
+                },
+            )
+        else:
+            self.shipments.update(
+                s,
+                {
+                    "status": status,
+                    "carrier": carrier,
+                    "tracking_number": tracking,
+                    "shipped_at": shipped_dt,
+                    "delivered_at": delivered_dt,
+                },
+            )
 
-            # Optional fulfillment auto-transition
-            if status == ShipmentStatusEnum.delivered and o.status == OrderStatusEnum.paid:
-                o.status = OrderStatusEnum.fulfilled
-                o.fulfilled_at = cast("datetime | None", datetime.now(timezone.utc))
-                self.orders.save(o)
+        # Optional fulfillment auto-transition
+        if status == ShipmentStatusEnum.delivered and o.status == OrderStatusEnum.paid:
+            o.status = OrderStatusEnum.fulfilled
+            o.fulfilled_at = cast("datetime | None", datetime.now(timezone.utc))
+            self.orders.save(o)
 
+        self.db.commit()
         self.db.refresh(o)
         return o.shipment
 
@@ -195,29 +195,29 @@ class AdminOrderService:
         if o.status not in {OrderStatusEnum.paid, OrderStatusEnum.fulfilled}:
             raise BadRequest("Only 'paid' or 'fulfilled' orders can be refunded")
 
-        with self.db.begin():
-            # Restock items
-            for it in o.items:
-                if it.variant_id:
-                    v = self.inv.load_variant(it.variant_id)
-                    if v:
-                        self.inv.change_stock(
-                            v, +it.qty, InventoryMovementType.return_in,
-                            order_id=o.id, note=reason or "refund"
-                        )
+        # Restock items
+        for it in o.items:
+            if it.variant_id:
+                v = self.inv.load_variant(it.variant_id)
+                if v:
+                    self.inv.change_stock(
+                        v, +it.qty, InventoryMovementType.return_in,
+                        order_id=o.id, note=reason or "refund"
+                    )
 
-            # Record refund payment
-            self.payments.create(
-                o.id,
-                amount_cents=o.total_cents,
-                status=PaymentStatusEnum.refunded,
-                method=PaymentMethodEnum.cod,  # or track original method if you prefer
-                transaction_ref=None,
-            )
+        # Record refund payment
+        self.payments.create(
+            o.id,
+            amount_cents=o.total_cents,
+            status=PaymentStatusEnum.refunded,
+            method=PaymentMethodEnum.cod,  # or track original method if you prefer
+            transaction_ref=None,
+        )
 
-            # Update order status
-            o.status = OrderStatusEnum.refunded
-            self.orders.save(o)
+        # Update order status
+        o.status = OrderStatusEnum.refunded
+        self.orders.save(o)
 
+        self.db.commit()
         self.db.refresh(o)
         return o

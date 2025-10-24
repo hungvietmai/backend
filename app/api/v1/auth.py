@@ -39,4 +39,4 @@ def reset_password(payload: ResetPasswordIn, db: Session = Depends(get_db)):
 @router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT,
              responses={401: {"model": Problem}, 400: {"model": Problem}, 422: {"model": Problem}})
 def change_password(payload: ChangePasswordIn, current: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    AuthService(db).change_password(current.id, payload.current_password, payload.new_password)
+    AuthService(db).change_password(current.id, payload.new_password)
